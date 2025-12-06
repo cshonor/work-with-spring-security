@@ -97,6 +97,139 @@ SecurityConfig (使用 Bean)          │
 - ✅ `ProjectConfig` **提供**认证相关的 Bean
 - ✅ `SecurityConfig` **定义** `SecurityFilterChain`，配置 HTTP 安全规则
 
+### 🔍 Spring Security 如何识别 ProjectConfig 中的 Bean？
+
+#### 1. Spring 容器扫描机制
+
+**@Configuration 注解的作用：**
+- `@Configuration` 告诉 Spring 容器这是一个配置类
+- Spring Boot 启动时会自动扫描所有带 `@Configuration` 的类
+- 扫描路径由 `@SpringBootApplication` 注解控制（默认扫描主类所在包及其子包）
+
+**扫描流程：**
+```
+Spring Boot 启动
+    ↓
+@SpringBootApplication 注解启动组件扫描
+    ↓
+扫描 com.example.security 包及其子包
+    ↓
+发现 ProjectConfig 类（带 @Configuration 注解）
+    ↓
+识别为配置类，准备处理其中的 @Bean 方法
+```
+
+#### 2. Bean 注册机制
+
+**@Bean 注解的作用：**
+- `@Bean` 注解的方法会被 Spring 容器调用
+- 方法返回的对象会被注册为 Spring Bean，存储在 Spring 容器（ApplicationContext）中
+- Bean 的名称默认是方法名（如 `"passwordEncoder"`, `"userDetailsService"`）
+- Bean 的类型是方法返回类型（如 `PasswordEncoder`, `UserDetailsService`）
+
+**Bean 注册流程：**
+```
+Spring 容器发现 @Bean 方法
+    ↓
+调用 passwordEncoder() 方法
+    ↓
+返回 BCryptPasswordEncoder 实例
+    ↓
+注册为 Bean：名称="passwordEncoder", 类型=PasswordEncoder
+    ↓
+存储在 Spring 容器中
+```
+
+#### 3. Spring Security 的自动发现机制
+
+**类型匹配自动装配：**
+- Spring Security 启动时会自动在 Spring 容器中查找特定类型的 Bean
+- 查找 `UserDetailsService` 类型的 Bean → 用于用户认证
+- 查找 `PasswordEncoder` 类型的 Bean → 用于密码验证
+- 如果找到，会自动注入并使用；如果没找到，使用默认实现
+
+**自动发现流程：**
+```
+Spring Security 初始化
+    ↓
+在 Spring 容器中查找 UserDetailsService 类型的 Bean
+    ↓
+找到：ProjectConfig.userDetailsService() 返回的 InMemoryUserDetailsManager
+    ↓
+自动注入到认证管理器（AuthenticationManager）
+    ↓
+在 Spring 容器中查找 PasswordEncoder 类型的 Bean
+    ↓
+找到：ProjectConfig.passwordEncoder() 返回的 BCryptPasswordEncoder
+    ↓
+自动注入到认证管理器
+    ↓
+用户认证时使用这些 Bean
+```
+
+#### 4. 完整工作流程
+
+```
+1. Spring Boot 启动
+   ↓
+2. 组件扫描：发现 ProjectConfig（@Configuration）
+   ↓
+3. Bean 注册：
+   - 调用 passwordEncoder() → 注册 PasswordEncoder Bean
+   - 调用 userDetailsService() → 注册 UserDetailsService Bean
+   ↓
+4. Spring Security 初始化
+   ↓
+5. 自动发现：
+   - 查找 UserDetailsService 类型 → 找到 userDetailsService Bean
+   - 查找 PasswordEncoder 类型 → 找到 passwordEncoder Bean
+   ↓
+6. 自动注入：
+   - 将找到的 Bean 注入到认证管理器
+   ↓
+7. SecurityFilterChain 使用：
+   - 用户登录时，自动使用 UserDetailsService 验证用户
+   - 自动使用 PasswordEncoder 验证密码
+```
+
+#### 5. 为什么不需要显式注入？
+
+**Spring 的依赖注入机制：**
+- Spring Security 使用**类型匹配（Type-based）**的自动装配
+- 不需要在 `SecurityConfig` 中显式声明依赖
+- Spring Security 会自动从容器中获取需要的 Bean
+- 这是 Spring 的**依赖注入（Dependency Injection）**机制
+
+**关键点：**
+- ✅ 只需要在 `ProjectConfig` 中使用 `@Bean` 注册 Bean
+- ✅ Spring Security 会自动发现和使用
+- ✅ 不需要手动注入或配置
+- ✅ 这是 Spring 的"约定优于配置"原则的体现
+
+#### 6. 验证 Bean 是否被识别
+
+你可以在代码中验证 Bean 是否被正确注册：
+
+```java
+@RestController
+public class TestController {
+    
+    @Autowired
+    private UserDetailsService userDetailsService;
+    
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+    
+    @GetMapping("/test-beans")
+    public String testBeans() {
+        return "UserDetailsService: " + userDetailsService.getClass().getName() + "\n" +
+               "PasswordEncoder: " + passwordEncoder.getClass().getName();
+    }
+}
+```
+
+如果 Bean 被正确注册，这些注入会成功，并显示 Bean 的类型。
+
 ## 🚀 快速开始
 
 ### 前置要求

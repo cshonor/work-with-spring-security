@@ -13,17 +13,61 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
  * 项目配置类
  * 负责配置项目级别的 Bean，包括用户详情服务和密码编码器
  * 
+ * <p><strong>Spring Security 如何识别这个配置类中的 Bean：</strong></p>
+ * 
+ * <p><strong>1. @Configuration 注解的作用：</strong></p>
+ * <ul>
+ *   <li>@Configuration 告诉 Spring 容器这是一个配置类</li>
+ *   <li>Spring Boot 启动时会自动扫描所有带 @Configuration 的类</li>
+ *   <li>扫描路径由 @SpringBootApplication 注解控制（默认扫描主类所在包及其子包）</li>
+ * </ul>
+ * 
+ * <p><strong>2. @Bean 注解的作用：</strong></p>
+ * <ul>
+ *   <li>@Bean 注解的方法会被 Spring 容器调用</li>
+ *   <li>方法返回的对象会被注册为 Spring Bean，存储在 Spring 容器中</li>
+ *   <li>Bean 的名称默认是方法名（如 "passwordEncoder", "userDetailsService"）</li>
+ *   <li>Bean 的类型是方法返回类型（如 PasswordEncoder, UserDetailsService）</li>
+ * </ul>
+ * 
+ * <p><strong>3. Spring Security 的自动发现机制：</strong></p>
+ * <ul>
+ *   <li>Spring Security 启动时会自动在 Spring 容器中查找特定类型的 Bean</li>
+ *   <li>查找 UserDetailsService 类型的 Bean → 用于用户认证</li>
+ *   <li>查找 PasswordEncoder 类型的 Bean → 用于密码验证</li>
+ *   <li>如果找到，会自动注入并使用；如果没找到，使用默认实现</li>
+ * </ul>
+ * 
+ * <p><strong>4. 工作流程：</strong></p>
+ * <pre>
+ * Spring Boot 启动
+ *     ↓
+ * 扫描 @Configuration 类（包括 ProjectConfig）
+ *     ↓
+ * 调用 @Bean 方法，注册 Bean 到容器
+ *     ↓
+ * Spring Security 初始化
+ *     ↓
+ * 在容器中查找 UserDetailsService 类型 Bean → 找到 userDetailsService()
+ *     ↓
+ * 在容器中查找 PasswordEncoder 类型 Bean → 找到 passwordEncoder()
+ *     ↓
+ * 自动注入到 SecurityFilterChain 中使用
+ * </pre>
+ * 
+ * <p><strong>5. 为什么不需要显式注入：</strong></p>
+ * <ul>
+ *   <li>Spring Security 使用类型匹配（Type-based）的自动装配</li>
+ *   <li>不需要在 SecurityConfig 中显式声明依赖</li>
+ *   <li>Spring Security 会自动从容器中获取需要的 Bean</li>
+ *   <li>这是 Spring 的依赖注入（Dependency Injection）机制</li>
+ * </ul>
+ * 
  * <p><strong>配置类之间的关系：</strong></p>
  * <ul>
  *   <li><strong>ProjectConfig</strong>：提供认证相关的 Bean（UserDetailsService, PasswordEncoder）</li>
  *   <li><strong>SecurityConfig</strong>：提供 SecurityFilterChain Bean，配置 HTTP 安全规则</li>
- * </ul>
- * 
- * <p><strong>工作原理：</strong></p>
- * <ul>
- *   <li>ProjectConfig 注册的 Bean 会被 Spring Security 自动发现和使用</li>
- *   <li>SecurityConfig 中的 SecurityFilterChain 在认证时会自动使用这里的 UserDetailsService 和 PasswordEncoder</li>
- *   <li>这是一种"组合"的方式：SecurityFilterChain 组合使用其他配置类提供的 Bean</li>
+ *   <li>Spring Security 自动将 ProjectConfig 的 Bean 注入到 SecurityFilterChain 中使用</li>
  * </ul>
  * 
  * <p><strong>注意：</strong>此配置类使用新式 Bean 配置方式，不再继承 WebSecurityConfigurerAdapter</p>
