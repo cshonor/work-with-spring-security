@@ -202,16 +202,48 @@ SecurityFilterChain (SecurityConfig) - 拦截请求
 
 ### 5. 新式配置方式（SecurityFilterChain vs WebSecurityConfigurerAdapter）
 
-**旧方式（已弃用）：**
-- 继承 `WebSecurityConfigurerAdapter`
-- 重写 `configure()` 方法
-- Spring Security 5.7+ 已弃用，Spring Boot 3.x 不再支持
+#### 🔄 SecurityFilterChain 替代了 configure() 方法
 
-**新方式（当前使用）：**
-- 使用 `@Bean` 方法返回 `SecurityFilterChain`
-- 配置更加函数式和灵活
-- 支持多个 SecurityFilterChain
-- 避免类继承，使用组合方式
+**核心概念：**
+- `SecurityFilterChain` Bean 方法**完全替代**了 `WebSecurityConfigurerAdapter.configure(HttpSecurity http)` 方法
+- **功能完全相同**：都是配置 HTTP 安全规则（授权、认证、登录等）
+- **实现方式不同**：一个是通过继承重写方法，一个是返回 Bean
+
+**旧方式（已弃用，Spring Security 5.7+）：**
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests()
+            .antMatchers("/public").permitAll()
+            .anyRequest().authenticated();
+    }
+}
+```
+
+**新方式（当前使用，Spring Boot 3.x）：**
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests(authz -> authz
+            .requestMatchers("/public").permitAll()
+            .anyRequest().authenticated()
+        );
+        return http.build();
+    }
+}
+```
+
+**对比说明：**
+- **旧方式**：继承 `WebSecurityConfigurerAdapter`，重写 `configure()` 方法
+- **新方式**：定义 `@Bean` 方法返回 `SecurityFilterChain`
+- **功能相同**：都是配置 HTTP 安全规则
+- **新方式优势**：避免类继承，支持多个 SecurityFilterChain，使用 Lambda 表达式，更灵活
 
 ## 扩展学习
 

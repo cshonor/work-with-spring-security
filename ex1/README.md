@@ -149,16 +149,26 @@ SecurityConfig (使用 Bean)          │
 
 ### 1. 新式配置方式（SecurityFilterChain）
 
-**旧方式（已弃用）：**
+#### 🔄 SecurityFilterChain 替代了 configure() 方法
+
+**核心概念：**
+- `SecurityFilterChain` Bean 方法**完全替代**了 `WebSecurityConfigurerAdapter.configure(HttpSecurity http)` 方法
+- **功能完全相同**：都是配置 HTTP 安全规则（授权、认证、登录等）
+- **实现方式不同**：一个是通过继承重写方法，一个是返回 Bean
+
+**旧方式（已弃用，Spring Security 5.7+）：**
 ```java
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    // configure() 方法配置 HTTP 安全规则
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http.authorizeRequests()
             .antMatchers("/public").permitAll()
-            .anyRequest().authenticated();
+            .anyRequest().authenticated()
+            .and()
+            .formLogin();
     }
 }
 ```
@@ -168,20 +178,57 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+    // SecurityFilterChain Bean 方法替代了 configure() 方法
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.authorizeHttpRequests(authz -> authz
             .requestMatchers("/public").permitAll()
             .anyRequest().authenticated()
-        );
+        )
+        .formLogin();
         return http.build();
     }
 }
 ```
 
+#### 对比说明
+
+| 特性 | 旧方式 (configure) | 新方式 (SecurityFilterChain) |
+|------|-------------------|----------------------------|
+| **实现方式** | 继承 `WebSecurityConfigurerAdapter` | 定义 `@Bean` 方法 |
+| **方法签名** | `configure(HttpSecurity http)` | `SecurityFilterChain filterChain(HttpSecurity http)` |
+| **返回值** | void | `SecurityFilterChain` |
+| **配置方式** | 链式调用 `.and()` | Lambda 表达式，直接返回 |
+| **灵活性** | 只能有一个配置类 | 支持多个 SecurityFilterChain |
+| **Spring Boot 3.x** | ❌ 不支持 | ✅ 必需 |
+
+#### 工作方式对比
+
+**旧方式工作流程：**
+```
+Spring Security 启动
+    ↓
+发现继承了 WebSecurityConfigurerAdapter 的类
+    ↓
+自动调用 configure(HttpSecurity http) 方法
+    ↓
+根据方法内的配置构建安全过滤器链
+```
+
+**新方式工作流程：**
+```
+Spring Security 启动
+    ↓
+发现 SecurityFilterChain Bean
+    ↓
+调用 Bean 方法（如 filterChain()）
+    ↓
+使用返回的 SecurityFilterChain 构建安全过滤器链
+```
+
 **新方式的优势：**
-- ✅ 避免类继承，更灵活
-- ✅ 支持多个 SecurityFilterChain
+- ✅ 避免类继承，更符合组合优于继承的原则
+- ✅ 支持多个 SecurityFilterChain，为不同 URL 模式配置不同规则
 - ✅ 使用 Lambda 表达式，代码更简洁
 - ✅ Spring Boot 3.x 要求（WebSecurityConfigurerAdapter 已被移除）
 
@@ -231,40 +278,146 @@ public class SecurityConfig {
 
 ### ProjectConfig.java
 
+#### PasswordEncoder Bean
+
+```java
+@Bean
+public PasswordEncoder passwordEncoder() {
+    // 返回 BCryptPasswordEncoder 实例
+    // BCrypt 是一种安全的密码哈希算法，会自动生成盐值
+    return new BCryptPasswordEncoder();
+}
+```
+
+#### UserDetailsService Bean
+
 ```java
 @Bean
 public UserDetailsService userDetailsService() {
-    // 创建用户详情
+    // 创建普通用户详情
+    // User.builder() 是 Spring Security 提供的用户构建器
     UserDetails user = User.builder()
-        .username("user")
-        .password(passwordEncoder().encode("password"))
-        .roles("USER")
+        .username("user")                              // 设置用户名
+        .password(passwordEncoder().encode("password")) // 使用 PasswordEncoder 加密密码
+        .roles("USER")                                 // 分配 USER 角色（实际存储为 ROLE_USER）
+        .build();                                      // 构建 UserDetails 对象
+    
+    // 创建管理员用户详情
+    UserDetails admin = User.builder()
+        .username("admin")
+        .password(passwordEncoder().encode("admin"))
+        .roles("ADMIN")                                // 分配 ADMIN 角色（实际存储为 ROLE_ADMIN）
         .build();
     
-    // 使用 InMemoryUserDetailsManager 管理用户
+    // 使用 InMemoryUserDetailsManager 在内存中管理用户
+    // 应用重启后数据会丢失，仅用于开发和测试
     return new InMemoryUserDetailsManager(user, admin);
 }
 ```
 
 ### SecurityConfig.java
 
+#### SecurityFilterChain Bean 配置详解
+
 ```java
 @Bean
 public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-    http.authorizeHttpRequests(authz -> authz
-        .requestMatchers("/", "/public").permitAll()
-        .requestMatchers("/admin").hasRole("ADMIN")
-        .requestMatchers("/user").hasAnyRole("USER", "ADMIN")
-        .anyRequest().authenticated()
-    )
-    .formLogin(form -> form
-        .loginPage("/login")
-        .permitAll()
-    );
+    http
+        // ========== 1. 配置 HTTP 请求授权规则 ==========
+        // authorizeHttpRequests: 配置哪些 HTTP 请求需要什么样的权限
+        // authz: Lambda 表达式的参数，代表授权配置器
+        .authorizeHttpRequests(authz -> authz
+            // requestMatchers: 匹配特定的 URL 路径
+            // permitAll(): 允许所有用户访问（无需认证）
+            // 这里配置根路径 "/" 和 "/public" 路径为公开访问
+            .requestMatchers("/", "/public").permitAll()
+            
+            // hasRole("ADMIN"): 只有具有 ADMIN 角色的用户才能访问
+            // 注意：Spring Security 会自动在角色名前添加 "ROLE_" 前缀
+            // 所以这里实际检查的是 "ROLE_ADMIN"
+            .requestMatchers("/admin").hasRole("ADMIN")
+            
+            // hasAnyRole("USER", "ADMIN"): 具有 USER 或 ADMIN 任一角色即可访问
+            // 实际检查的是 "ROLE_USER" 或 "ROLE_ADMIN"
+            .requestMatchers("/user").hasAnyRole("USER", "ADMIN")
+            
+            // anyRequest(): 匹配所有其他请求
+            // authenticated(): 需要认证（登录）后才能访问
+            // 这个规则会应用到所有未在上面明确配置的 URL
+            .anyRequest().authenticated()
+        )
+        
+        // ========== 2. 配置表单登录 ==========
+        // formLogin: 启用基于表单的登录
+        // form: Lambda 表达式的参数，代表表单登录配置器
+        .formLogin(form -> form
+            // loginPage("/login"): 指定自定义登录页面路径
+            // 如果不配置，Spring Security 会使用默认的登录页面
+            // 访问受保护资源时，会自动重定向到此页面
+            .loginPage("/login")
+            
+            // permitAll(): 登录页面本身允许所有用户访问
+            // 未登录用户也需要能访问登录页面才能进行登录
+            .permitAll()
+        )
+        
+        // ========== 3. 配置登出功能 ==========
+        // logout: 启用登出功能
+        // logout: Lambda 表达式的参数，代表登出配置器
+        .logout(logout -> logout
+            // permitAll(): 允许所有用户访问登出功能
+            // 默认登出 URL 是 "/logout"
+            // 用户访问此 URL 后会登出并清除认证信息
+            .permitAll()
+        );
     
+    // build(): 构建并返回 SecurityFilterChain 对象
+    // 这个方法会将所有配置组合成一个完整的安全过滤器链
     return http.build();
 }
 ```
+
+#### 配置项详细说明
+
+**授权规则（authorizeHttpRequests）：**
+
+| 配置 | 说明 | 示例 |
+|------|------|------|
+| `permitAll()` | 允许所有用户访问，无需认证 | `/public` 路径 |
+| `authenticated()` | 需要登录才能访问 | 默认规则 |
+| `hasRole("ADMIN")` | 需要特定角色（实际检查 ROLE_ADMIN） | `/admin` 路径 |
+| `hasAnyRole("USER", "ADMIN")` | 需要多个角色中的任意一个 | `/user` 路径 |
+| `hasAuthority("READ")` | 需要特定权限 | 更细粒度的权限控制 |
+
+**角色名称说明：**
+
+- 使用 `roles("USER")` 时，Spring Security 会自动添加 `ROLE_` 前缀
+- 实际存储和检查的是 `ROLE_USER`，而不是 `USER`
+- 使用 `hasRole("USER")` 时，会自动检查 `ROLE_USER`
+
+**匹配顺序：**
+
+Spring Security 按照配置顺序从上到下检查规则，**第一个匹配的规则会被应用**：
+
+1. 先检查 `/` 和 `/public` → 允许所有访问
+2. 再检查 `/admin` → 需要 ADMIN 角色
+3. 再检查 `/user` → 需要 USER 或 ADMIN 角色
+4. 最后检查 `anyRequest()` → 需要认证
+
+**登录流程：**
+
+1. 用户访问受保护资源（如 `/user`）
+2. Spring Security 发现用户未认证
+3. 自动重定向到 `/login` 登录页面
+4. 用户输入用户名和密码
+5. Spring Security 使用 `UserDetailsService` 验证用户
+6. 验证成功后重定向到原本想访问的页面
+
+**登出流程：**
+
+1. 用户访问 `/logout`（默认登出 URL）
+2. Spring Security 清除用户的认证信息（Session）
+3. 重定向到登录页面或首页
 
 ## 🔍 常见问题
 
