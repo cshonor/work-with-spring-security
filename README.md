@@ -67,6 +67,66 @@ ex1/
 - 登录页面: `/login`
 - 支持登出功能
 
+## 配置类关系说明
+
+### ProjectConfig 与 SecurityConfig 的关系
+
+本项目采用了配置分离的设计，将不同的职责分配到不同的配置类中：
+
+#### 配置类职责划分
+
+- **ProjectConfig**：
+  - 提供 `UserDetailsService` Bean（用户认证服务）
+  - 提供 `PasswordEncoder` Bean（密码编码器）
+  - 使用 `InMemoryUserDetailsManager` 管理内存中的用户信息
+
+- **SecurityConfig**：
+  - 提供 `SecurityFilterChain` Bean（HTTP 安全过滤器链）
+  - 配置 URL 访问规则和权限
+  - 配置登录/登出行为
+
+#### 重要概念
+
+**ProjectConfig 不是 SecurityFilterChain**
+
+- `ProjectConfig` 本身不是 `SecurityFilterChain`，它只是提供认证相关的 Bean
+- `SecurityConfig` 中定义了 `SecurityFilterChain` Bean，用于配置 HTTP 安全规则
+- Spring Security 会自动将 `ProjectConfig` 的 Bean 注入到 `SecurityFilterChain` 中使用
+
+#### 工作流程
+
+当用户发起请求时，Spring Security 的执行流程如下：
+
+```
+用户请求
+    ↓
+SecurityFilterChain (SecurityConfig) - 拦截请求
+    ↓
+需要认证？
+    ↓ 是
+使用 UserDetailsService (ProjectConfig) - 验证用户名
+    ↓
+使用 PasswordEncoder (ProjectConfig) - 验证密码
+    ↓
+授权检查 - 验证角色和权限
+    ↓
+允许/拒绝访问
+```
+
+#### 组合优于继承
+
+这是一种**组合**的设计方式：
+- `SecurityFilterChain` 组合使用其他配置类提供的 Bean
+- 不同于旧版本的继承 `WebSecurityConfigurerAdapter` 方式
+- 更加灵活，符合现代 Spring 的最佳实践
+
+#### 为什么使用新方式？
+
+- **避免类继承**：更符合组合优于继承的原则
+- **支持多个 SecurityFilterChain**：可以为不同的 URL 模式配置不同的安全规则
+- **配置更加现代化**：使用 Lambda 表达式，代码更简洁
+- **Spring Boot 3.x 要求**：`WebSecurityConfigurerAdapter` 已被移除
+
 ## 运行项目
 
 ### 前置要求
@@ -120,12 +180,13 @@ ex1/
 
 ## 学习要点
 
-### 1. 配置分离
+### 1. 配置分离与组合设计
 
-- `ProjectConfig`: 负责用户管理和密码编码器配置
-- `SecurityConfig`: 负责 HTTP 安全规则配置
+- `ProjectConfig`: 负责用户管理和密码编码器配置，提供认证相关的 Bean
+- `SecurityConfig`: 负责 HTTP 安全规则配置，定义 SecurityFilterChain Bean
+- Spring Security 会自动将 `ProjectConfig` 的 Bean 注入到 `SecurityFilterChain` 中使用
 
-这种分离使得配置更加清晰，便于维护。
+这种分离使得配置更加清晰，便于维护。使用组合而非继承，符合现代 Spring 的最佳实践。
 
 ### 2. 内存用户管理
 
@@ -138,6 +199,19 @@ ex1/
 ### 4. 密码加密
 
 使用 `BCryptPasswordEncoder` 确保密码在存储时是加密的，提高安全性。
+
+### 5. 新式配置方式（SecurityFilterChain vs WebSecurityConfigurerAdapter）
+
+**旧方式（已弃用）：**
+- 继承 `WebSecurityConfigurerAdapter`
+- 重写 `configure()` 方法
+- Spring Security 5.7+ 已弃用，Spring Boot 3.x 不再支持
+
+**新方式（当前使用）：**
+- 使用 `@Bean` 方法返回 `SecurityFilterChain`
+- 配置更加函数式和灵活
+- 支持多个 SecurityFilterChain
+- 避免类继承，使用组合方式
 
 ## 扩展学习
 

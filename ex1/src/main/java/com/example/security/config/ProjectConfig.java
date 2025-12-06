@@ -12,9 +12,25 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 /**
  * 项目配置类
  * 负责配置项目级别的 Bean，包括用户详情服务和密码编码器
+ * 
+ * <p><strong>配置类之间的关系：</strong></p>
+ * <ul>
+ *   <li><strong>ProjectConfig</strong>：提供认证相关的 Bean（UserDetailsService, PasswordEncoder）</li>
+ *   <li><strong>SecurityConfig</strong>：提供 SecurityFilterChain Bean，配置 HTTP 安全规则</li>
+ * </ul>
+ * 
+ * <p><strong>工作原理：</strong></p>
+ * <ul>
+ *   <li>ProjectConfig 注册的 Bean 会被 Spring Security 自动发现和使用</li>
+ *   <li>SecurityConfig 中的 SecurityFilterChain 在认证时会自动使用这里的 UserDetailsService 和 PasswordEncoder</li>
+ *   <li>这是一种"组合"的方式：SecurityFilterChain 组合使用其他配置类提供的 Bean</li>
+ * </ul>
+ * 
+ * <p><strong>注意：</strong>此配置类使用新式 Bean 配置方式，不再继承 WebSecurityConfigurerAdapter</p>
+ * <p>在 Spring Boot 3.x 中，WebSecurityConfigurerAdapter 已被移除，必须使用 Bean 方式配置</p>
  */
 @Configuration
-public class ProjectConfig extends WebSecurityConfigurerAdapter {
+public class ProjectConfig {
 
     /**
      * 配置密码编码器
@@ -22,10 +38,6 @@ public class ProjectConfig extends WebSecurityConfigurerAdapter {
      * 
      * @return PasswordEncoder 密码编码器实例
      */
-    @Override
-    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-        auth.userDetailsService(userDetailsService());
-    }
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
