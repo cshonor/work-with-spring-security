@@ -14,7 +14,7 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
  * 负责配置项目级别的 Bean，包括用户详情服务和密码编码器
  */
 @Configuration
-public class ProjectConfig {
+public class ProjectConfig extends WebSecurityConfigurerAdapter {
 
     /**
      * 配置密码编码器
@@ -22,6 +22,10 @@ public class ProjectConfig {
      * 
      * @return PasswordEncoder 密码编码器实例
      */
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userDetailsService());
+    }
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
